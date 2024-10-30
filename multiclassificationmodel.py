@@ -82,7 +82,6 @@ class MultiClassification:
             self.weights = np.load('weights.npy', allow_pickle=True)
             self.bias = np.load('bias.npy', allow_pickle=True)
         
-    
     def fit(self, x_train, y_train, learning_rate = 0.01, batch_size = 64, epochs = 1000, init = 'xavier', uniform = True, momentum = True):
         self.epochs = epochs
         self.learning_rate = learning_rate
@@ -95,8 +94,8 @@ class MultiClassification:
             self.velo_w = 0
             self.velo_b = 0
             
-        accuracy_point = []
-        epoch_loss = []
+        self.accuracy_point = []
+        self.epoch_loss = []
         for epoch in tqdm(range(self.epochs), desc='Epochs '):
             rand_id = np.random.choice(self.samples, size = batch_size, replace = False)
             for i in rand_id:
@@ -110,13 +109,12 @@ class MultiClassification:
             if epoch % 100 == 0:
                 y_pred = self.predict(x_train)
                 acc = self.accuracy(y_train, y_pred)
-                accuracy_point.append(acc)
+                self.accuracy_point.append(acc)
                 y_pred = self.one_hot(pd.Series(y_pred))
                 loss = self.loss(y_train_one_hot.values, y_pred.values)
-                epoch_loss.append(loss)
+                self.epoch_loss.append(loss)
                 
         self.save_weights_bias()
-        return accuracy_point, epoch_loss
     
     def momentum(self, alpha = 0.9):
         self.velo_w = alpha*self.velo_w + self.learning_rate*self.dW
