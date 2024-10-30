@@ -13,10 +13,29 @@ class MultiClassification:
         y_new = pd.DataFrame(y_new)
         return y_new
     
-    def initialize(self):
+    def xavier_initialize(self, uniform = True):
+        if uniform:
+            limit = np.sqrt(6 / (self.num_class + self.features))
+            bias = self.bias_initialize()
+            return np.random.uniform(-limit, limit, (self.num_class, self.features)), bias
+        else:
+            std = np.sqrt(2 / (self.num_class + self.features))
+            bias = self.bias_initialize()
+            return np.random.normal(0, std, (self.num_class, self.features)), bias
+    
+    def bias_initialize(self):
+        return np.zeros((self.num_class, 1))
+    
+    def random_initialize(self):
         weights = np.random.rand(self.num_class, self.features)
         bias = np.zeros((self.num_class, 1))
         return weights, bias
+    
+    def initialize(self, init = 'xavier', uniform = True):
+        if init == 'xavier':
+            w, b = self.xavier_initialize(uniform=uniform)
+            return w, b
+        return self.random_initialize()
     
     def softmax(self, z):
         exp_z = np.exp(z - np.max(z))
@@ -52,26 +71,30 @@ class MultiClassification:
         
         np.save('weights.npy', self.weights, allow_pickle=True)
         np.save('bias.npy', self.bias, allow_pickle=True)
+        print("Complete Saving Weights and Bias")
 
-    def get_weights_bias(self):
+    def get_weights_bias(self, init = 'xavier', uniform = True):
         if self.is_file_empty('weights.npy') or self.is_file_empty('bias.npy'):
             print("Generate new weights and bias")
-            self.weights, self.bias = self.initialize()
+            self.weights, self.bias = self.initialize(init=init, uniform=uniform)
         else:
             print("Loading Weights and Bias")
             self.weights = np.load('weights.npy', allow_pickle=True)
             self.bias = np.load('bias.npy', allow_pickle=True)
         
     
-    def fit(self, x_train, y_train, learning_rate = 0.01, batch_size = 64, epochs = 1000):
+    def fit(self, x_train, y_train, learning_rate = 0.01, batch_size = 64, epochs = 1000, init = 'xavier', uniform = True, momentum = True):
         self.epochs = epochs
         self.learning_rate = learning_rate
         self.num_class = len(y_train.unique())
         y_train_one_hot = self.one_hot(y_train)
         
         self.samples, self.features = x_train.shape
-        self.get_weights_bias()
-        
+        self.get_weights_bias(init=init, uniform=uniform)
+        if momentum:
+            self.velo_w = 0
+            self.velo_b = 0
+            
         accuracy_point = []
         epoch_loss = []
         for epoch in tqdm(range(self.epochs), desc='Epochs '):
@@ -82,7 +105,7 @@ class MultiClassification:
                 linear_combination = np.matmul(self.weights, xi) + self.bias
                 activate = self.softmax(linear_combination)
                 self.dW, self.db = self.stochastic_gradient(xi, yi, activate)
-                self.update_params()
+                self.update_params(momentum = momentum)
             
             if epoch % 100 == 0:
                 y_pred = self.predict(x_train)
@@ -94,11 +117,19 @@ class MultiClassification:
                 
         self.save_weights_bias()
         return accuracy_point, epoch_loss
-                
     
-    def update_params(self):
-        self.weights = self.weights - self.learning_rate * self.dW
-        self.bias = self.bias - self.learning_rate * self.db
+    def momentum(self, alpha = 0.9):
+        self.velo_w = alpha*self.velo_w + self.learning_rate*self.dW
+        self.velo_b = alpha*self.velo_b + self.learning_rate*self.db
+        self.weights = self.weights - self.velo_w
+        self.bias = self.bias - self.velo_b
+    
+    def update_params(self, momentum = True):
+        if momentum:
+            self.momentum()
+        else:
+            self.weights = self.weights - self.learning_rate * self.dW
+            self.bias = self.bias - self.learning_rate * self.db
     
     def loss(self, y_true, y_pred):
         epsilon = 1e-12
